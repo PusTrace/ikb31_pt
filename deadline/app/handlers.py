@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+import logging
 
 from aiogram import types, Router, F
 from aiogram.filters.command import CommandStart
@@ -9,6 +10,8 @@ import app.keyboards as kb
 from app.keyboards import clear
 from app.states import ReminderStates
 from app.utils import load_reminders, save_reminders
+
+logging.basicConfig(level=logging.INFO)
 
 
 reminders = load_reminders()
@@ -37,7 +40,14 @@ async def enter_name(message: types.Message, state: FSMContext):
         await message.answer("Установка дедлайна отменена.", reply_markup=kb.main)
         return
 
+    if not message.text.strip():  # Проверка на пустой ввод
+        await message.answer("Имя не может быть пустым. Попробуйте снова.")
+        return
+
     await state.update_data(name=message.text)
+    user_data = await state.get_data()
+    logging.info(f"Сохраненные данные после ввода имени: {user_data}")
+
     await state.set_state(ReminderStates.waiting_for_deadline)
     await message.answer("Введите дату дедлайна в формате ДД.ММ")
 
@@ -53,14 +63,14 @@ async def enter_deadline(message: types.Message, state: FSMContext):
         user_data = await state.get_data()
 
         # Сохраняем напоминание
-        user_id = str(message.from_user.id)
+        user_id = str(message.chat.id)
         if user_id not in reminders:
             reminders[user_id] = {"reminders": []}
 
         reminders[user_id]["reminders"].append({
             "name": user_data["name"],
             "deadline": deadline.strftime("%d.%m"),
-            "intervals": [1, 2, 3, 7]
+            "intervals": [0, 1, 2, 3, 7]
         })
 
         # Завершаем процесс и возвращаем главную клавиатуру
@@ -88,13 +98,13 @@ async def cancel_anywhere(message: types.Message, state: FSMContext):
 @router.message(F.text == 'следующий дедлайн ➡️')
 async def info(message: types.Message):
     now = datetime.now()
-    user_id = str(message.from_user.id)
+    user_id = str(message.chat.id)
 
     if user_id not in reminders or not reminders[user_id]["reminders"]:
         await message.answer("У вас нету напоминаний.")
         return
 
-    # Ищем ближайший день дедлайна
+    # Ищем ближайший  дедлайна
     user_reminders = reminders[user_id]["reminders"]
     next_deadline = None
 
@@ -102,11 +112,11 @@ async def info(message: types.Message):
         deadline = datetime.strptime(reminder["deadline"], "%d.%m")
         current_year_deadline = deadline.replace(year=now.year)
 
-        # Обновляем ближайший день дедлайна
+        # Обновляем ближайший  дедлайна
         if not next_deadline or current_year_deadline < next_deadline["date"]:
             next_deadline = {"name": reminder["name"], "date": current_year_deadline}
 
-    # Если нашли ближайший день дедлайна
+    # Если нашли ближайший  дедлайна
     if next_deadline:
         time_left = next_deadline["date"] - now
         days_left = time_left.days
@@ -114,7 +124,7 @@ async def info(message: types.Message):
         minutes_left = (time_left.seconds // 60) % 60
 
         await message.answer(
-            f"Следующий день дедлайна у : {next_deadline['name']} через {days_left} дня, {hours_left} часов и {minutes_left} минут.")
+            f"Следующий дедлайн : {next_deadline['name']} через {days_left} дня, {hours_left} часов и {minutes_left} минут.")
     else:
         await message.answer("У вас нет предстоящих дней дедлайна.")
 
@@ -179,7 +189,7 @@ async def enter_interval(message: types.Message, state: FSMContext):
         user_data = await state.get_data()
 
         # Сохраняем напоминание
-        user_id = str(message.from_user.id)
+        user_id = str(message.chat.id)
         if user_id not in reminders:
             reminders[user_id] = {"reminders": []}
 
@@ -207,7 +217,7 @@ async def enter_interval(message: types.Message, state: FSMContext):
 @router.message(F.text.casefold() == 'Вывести всю базу данных 📂'.casefold())
 async def settings_interval(message: types.Message):
 
-    user_id = str(message.from_user.id)
+    user_id = str(message.chat.id)
     if user_id not in reminders:
         reminders[user_id] = {"reminders": []}
         output_database = "у вас ещё нет базы данных"
