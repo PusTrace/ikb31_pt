@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-FILE_PATH = Path("database.json")
+FILE_PATH = Path("database/database.json")
 
 def load_reminders():
     if FILE_PATH.exists():
