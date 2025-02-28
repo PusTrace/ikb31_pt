@@ -12,7 +12,7 @@ from app.utils import load_reminders, save_reminders
 
 
 reminders = load_reminders()
-birthday = []
+deadline = []
 
 router = Router()
 
@@ -25,7 +25,7 @@ async def cmd_start(message: types.Message):
 
 @router.message(F.text == 'Установить напоминание 📆')
 async def start_set_reminder(message: types.Message, state: FSMContext):
-    user_id = str(message.chat.id)  # ID чата или пользователя
+    user_id = str(message.chat.id)  # ID чата
     await state.set_state(ReminderStates.waiting_for_name)
     await state.update_data(user_id=user_id)  # Сохраняем ID в состоянии
     await message.answer("Введите имя кого хотите добавить", reply_markup=clear)
@@ -34,22 +34,22 @@ async def start_set_reminder(message: types.Message, state: FSMContext):
 async def enter_name(message: types.Message, state: FSMContext):
     if message.text.lower() == "отмена❌":
         await state.clear()
-        await message.answer("Установка напоминания отменена.", reply_markup=kb.main)
+        await message.answer("Установка дедлайна отменена.", reply_markup=kb.main)
         return
 
     await state.update_data(name=message.text)
-    await state.set_state(ReminderStates.waiting_for_birthday)
-    await message.answer("Введите дату рождения в формате ДД.ММ.ГГГГ")
+    await state.set_state(ReminderStates.waiting_for_deadline)
+    await message.answer("Введите дату дедлайна в формате ДД.ММ")
 
-@router.message(ReminderStates.waiting_for_birthday)
-async def enter_birthday(message: types.Message, state: FSMContext):
+@router.message(ReminderStates.waiting_for_deadline)
+async def enter_deadline(message: types.Message, state: FSMContext):
     if message.text.lower() == "отмена❌":
         await state.clear()
-        await message.answer("Установка напоминания отменена.", reply_markup=kb.main)
+        await message.answer("Установка дедлайна отменена.", reply_markup=kb.main)
         return
 
     try:
-        birthday = datetime.strptime(message.text, "%d.%m.%Y")
+        deadline = datetime.strptime(message.text, "%d.%m")
         user_data = await state.get_data()
 
         # Сохраняем напоминание
@@ -59,19 +59,19 @@ async def enter_birthday(message: types.Message, state: FSMContext):
 
         reminders[user_id]["reminders"].append({
             "name": user_data["name"],
-            "birthday": birthday.strftime("%d.%m.%Y"),
-            "intervals": [1, 7, 30]
+            "deadline": deadline.strftime("%d.%m"),
+            "intervals": [1, 2, 3, 7]
         })
 
         # Завершаем процесс и возвращаем главную клавиатуру
         save_reminders(reminders)
         await state.clear()
         await message.answer(
-            f"Напоминание для {user_data['name']} на {birthday.strftime('%d.%m.%Y')} успешно установлено!",
+            f"Напоминание для {user_data['name']} на {deadline.strftime('%d.%m')} успешно установлено!",
             reply_markup=kb.main
         )
     except ValueError:
-        await message.answer("Ошибка: введите дату в формате ДД.ММ.ГГГГ")
+        await message.answer("Ошибка: введите дату в формате ДД.ММ")
 
 
 
@@ -85,7 +85,7 @@ async def cancel_anywhere(message: types.Message, state: FSMContext):
 
 
 
-@router.message(F.text == 'следующий др ➡️')
+@router.message(F.text == 'следующий дедлайн ➡️')
 async def info(message: types.Message):
     now = datetime.now()
     user_id = str(message.from_user.id)
@@ -94,33 +94,29 @@ async def info(message: types.Message):
         await message.answer("У вас нету напоминаний.")
         return
 
-    # Ищем ближайший день рождения
+    # Ищем ближайший день дедлайна
     user_reminders = reminders[user_id]["reminders"]
-    next_birthday = None
+    next_deadline = None
 
     for reminder in user_reminders:
-        birthday = datetime.strptime(reminder["birthday"], "%d.%m.%Y")
-        current_year_birthday = birthday.replace(year=now.year)
+        deadline = datetime.strptime(reminder["deadline"], "%d.%m")
+        current_year_deadline = deadline.replace(year=now.year)
 
-        # Если день рождения в текущем году уже прошёл, переносим его на следующий год
-        if current_year_birthday < now:
-            current_year_birthday = current_year_birthday.replace(year=now.year + 1)
+        # Обновляем ближайший день дедлайна
+        if not next_deadline or current_year_deadline < next_deadline["date"]:
+            next_deadline = {"name": reminder["name"], "date": current_year_deadline}
 
-        # Обновляем ближайший день рождения
-        if not next_birthday or current_year_birthday < next_birthday["date"]:
-            next_birthday = {"name": reminder["name"], "date": current_year_birthday}
-
-    # Если нашли ближайший день рождения
-    if next_birthday:
-        time_left = next_birthday["date"] - now
+    # Если нашли ближайший день дедлайна
+    if next_deadline:
+        time_left = next_deadline["date"] - now
         days_left = time_left.days
         hours_left = time_left.seconds // 3600
         minutes_left = (time_left.seconds // 60) % 60
 
         await message.answer(
-            f"Следующий день рождения у : {next_birthday['name']} через {days_left} дня, {hours_left} часов и {minutes_left} минут.")
+            f"Следующий день дедлайна у : {next_deadline['name']} через {days_left} дня, {hours_left} часов и {minutes_left} минут.")
     else:
-        await message.answer("У вас нет предстоящих дней рождения.")
+        await message.answer("У вас нет предстоящих дней дедлайна.")
 
 
 
@@ -179,7 +175,7 @@ async def enter_interval(message: types.Message, state: FSMContext):
 
     try:
         user_interval_str = str(message.text)
-        user_interval = [int(item.strip()) for item in user_interval_str.split(",")] #нужно превращать строки в числа перед добавлением в список
+        user_interval = [int(item.strip()) for item in user_interval_str.split(",")]
         user_data = await state.get_data()
 
         # Сохраняем напоминание
@@ -264,14 +260,10 @@ async def confirm_deletion(message: types.Message, state: FSMContext):
     await state.clear()
 
 
-@router.message(F.text.casefold() == 'о нас 👤'.casefold())
+@router.message(F.text.casefold() == 'help'.casefold())
 async def about_us(message: types.Message):
     await message.answer(
-        "Разработчик: Вавилин Сергей\n"
-        "Контакты:\n"
-        "https://t.me/PusTrace\n"
-        "sergeivavilin2005@mail.ru\n"
-        "\n"
-        "Системный администратор, а так же владелец сервера и бота: Вавилин Дмитрий\n"
-        "Контакты:\n"
-        "https://t.me/VDmitriiyM\n", reply_markup=kb.main)
+        "Github: https://github.com/PusTrace/ikb31_pt\n"
+        "Чтобы стать частью проекта отправьте свой ник от github на телеграмм аккаунт.\n"
+        "Телеграм: https://t.me/PusTrace"
+        , reply_markup=kb.main)

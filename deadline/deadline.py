@@ -40,19 +40,15 @@ async def check_and_send_reminders():
     for user_id, user_data in reminders.items():
         for reminder in user_data["reminders"]:
             # Проверяем, если дата рождения совпадает с текущей или находится в пределах интервала
-            birthday = datetime.strptime(reminder["birthday"], "%d.%m.%Y")
-            current_year_birthday = birthday.replace(year=now.year)
+            deadline = datetime.strptime(reminder["deadline"], "%d.%m")
+            current_year_deadline = deadline.replace(year=now.year)
 
-            # Если день рождения уже прошёл в этом году, переносим на следующий
-            if current_year_birthday < now:
-                current_year_birthday = current_year_birthday.replace(year=now.year + 1)
-
-            days_left = (current_year_birthday - now).days
-            if days_left in reminder["intervals"]:  # Если до ДР осталось указанное количество дней
+            days_left = (current_year_deadline - now).days
+            if days_left in reminder["intervals"]:
                 try:
                     await bot.send_message(
                         user_id,
-                        f"Напоминание: День рождения у {reminder['name']} через {days_left} дней! 🎉"
+                        f"Напоминание: {reminder['name']} через {days_left} дней!"
                     )
                 except Exception as e:
                     print(f"Ошибка при отправке сообщения {user_id}: {e}")
